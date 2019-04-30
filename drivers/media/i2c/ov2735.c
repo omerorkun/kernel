@@ -14,15 +14,10 @@
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
 #include <linux/sysfs.h>
-#include <linux/slab.h>
-#include <linux/version.h>
-#include <linux/rk-camera-module.h>
 #include <media/media-entity.h>
 #include <media/v4l2-async.h>
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-subdev.h>
-
-#define DRIVER_VERSION			KERNEL_VERSION(0, 0x01, 0x0)
 
 #ifndef V4L2_CID_DIGITAL_GAIN
 #define V4L2_CID_DIGITAL_GAIN		V4L2_CID_GAIN
@@ -90,8 +85,6 @@
 #define	ANALOG_GAIN_STEP		1
 #define	ANALOG_GAIN_DEFAULT		0x10
 
-#define OV2735_NAME			"ov2735"
-
 static const char * const ov2735_supply_names[] = {
 	"avdd",		/* Analog power */
 	"dovdd",	/* Digital I/O power */
@@ -134,10 +127,6 @@ struct ov2735 {
 	struct mutex		mutex;
 	bool			streaming;
 	const struct ov2735_mode *cur_mode;
-	u32			module_index;
-	const char		*module_facing;
-	const char		*module_name;
-	const char		*len_name;
 };
 
 #define to_ov2735(sd) container_of(sd, struct ov2735, subdev)
@@ -171,6 +160,7 @@ static struct regval ov2735_1920_1080_30fps[] = {
 	{0x0a, 0x20},
 	{0x06, 0x0a},	// VBLANK 8LSB
 	{0x24, 0x10},	// gain default 0x10, by yjz
+	//{UPDOWN_MIRROR_REG, 0x03},
 	{0x01, 0x01},
 	{0xfb, 0x73},	// ABL
 	{0x01, 0x01},
@@ -275,18 +265,18 @@ static struct regval ov2735_1920_1080_30fps[] = {
 #define MAX_FPS 30
 static const struct ov2735_mode supported_modes[] = {
 	{
-		.width = 1920,
+		.width = 3840,
 		.height = 1080,
 		.max_fps = MAX_FPS,
-		.exp_def = 0x18f,
-		.hts_def = HTS_DEF,
+		.exp_def = 0x31f,
+		.hts_def = HTS_DEF*2,
 		.vts_def = VTS_DEF,
 		.reg_list = ov2735_1920_1080_30fps,
 	},
 };
 
-#define OV2735_LINK_FREQ_420MHZ		420000000
-#define OV2735_PIXEL_RATE		(MAX_FPS * HTS_DEF * VTS_DEF)
+#define OV2735_LINK_FREQ_420MHZ		420000000 * 2
+#define OV2735_PIXEL_RATE		(MAX_FPS * HTS_DEF * VTS_DEF *2)
 static const s64 link_freq_menu_items[] = {
 	OV2735_LINK_FREQ_420MHZ
 };
@@ -515,80 +505,12 @@ static int ov2735_enable_test_pattern(struct ov2735 *ov2735, u32 pattern)
 				 val);
 }
 
-static void ov2735_get_module_inf(struct ov2735 *ov2735,
-				  struct rkmodule_inf *inf)
-{
-	memset(inf, 0, sizeof(*inf));
-	strlcpy(inf->base.sensor, OV2735_NAME, sizeof(inf->base.sensor));
-	strlcpy(inf->base.module, ov2735->module_name,
-		sizeof(inf->base.module));
-	strlcpy(inf->base.lens, ov2735->len_name, sizeof(inf->base.lens));
-}
-
-static long ov2735_ioctl(struct v4l2_subdev *sd, unsigned int cmd, void *arg)
-{
-	struct ov2735 *ov2735 = to_ov2735(sd);
-	long ret = 0;
-
-	switch (cmd) {
-	case RKMODULE_GET_MODULE_INFO:
-		ov2735_get_module_inf(ov2735, (struct rkmodule_inf *)arg);
-		break;
-	default:
-		ret = -ENOIOCTLCMD;
-		break;
-	}
-
-	return ret;
-}
-
-#ifdef CONFIG_COMPAT
-static long ov2735_compat_ioctl32(struct v4l2_subdev *sd,
-				  unsigned int cmd, unsigned long arg)
-{
-	void __user *up = compat_ptr(arg);
-	struct rkmodule_inf *inf;
-	struct rkmodule_awb_cfg *cfg;
-	long ret;
-
-	switch (cmd) {
-	case RKMODULE_GET_MODULE_INFO:
-		inf = kzalloc(sizeof(*inf), GFP_KERNEL);
-		if (!inf) {
-			ret = -ENOMEM;
-			return ret;
-		}
-
-		ret = ov2735_ioctl(sd, cmd, inf);
-		if (!ret)
-			ret = copy_to_user(up, inf, sizeof(*inf));
-		kfree(inf);
-		break;
-	case RKMODULE_AWB_CFG:
-		cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
-		if (!cfg) {
-			ret = -ENOMEM;
-			return ret;
-		}
-
-		ret = copy_from_user(cfg, up, sizeof(*cfg));
-		if (!ret)
-			ret = ov2735_ioctl(sd, cmd, cfg);
-		kfree(cfg);
-		break;
-	default:
-		ret = -ENOIOCTLCMD;
-		break;
-	}
-
-	return ret;
-}
-#endif
-
 static int __ov2735_start_stream(struct ov2735 *ov2735)
 {
 	int ret;
-
+/*	ret = ov2735_write_reg(ov2735->client, PAGE_SELECT_REG, 0);
+	ret = ov2735_write_reg(ov2735->client, 0x37, 0x01);
+	ret = ov2735_write_reg(ov2735->client, 0x36, 0x01);*/
 	ret = ov2735_write_array(ov2735->client, ov2735_global_regs);
 	if (ret)
 		return ret;
@@ -606,8 +528,19 @@ static int __ov2735_start_stream(struct ov2735 *ov2735)
 	if (ret)
 		return ret;
 
+
+	ret = ov2735_write_reg(ov2735->client, PAGE_SELECT_REG, PAGE_ONE);
+
+
 	ret |= ov2735_write_reg(ov2735->client, STREAM_CTRL_REG, STREAM_ON);
+/*	ret = ov2735_write_reg(ov2735->client, PAGE_SELECT_REG, 0);
+
+	ret = ov2735_write_reg(ov2735->client, 0x36, 0x00);
+	ret = ov2735_write_reg(ov2735->client, 0x37, 0x00);*/
+
+
 	printk("ov2735 stream start");
+//	mdelay(3);
 	return ret;
 }
 
@@ -642,12 +575,12 @@ static int ov2735_s_stream(struct v4l2_subdev *sd, int on)
 		ret = __ov2735_start_stream(ov2735);
 		if (ret) {
 			v4l2_err(sd, "start stream failed while write regs\n");
-//			pm_runtime_put(&client->dev);
+	//		pm_runtime_put(&client->dev);
 			goto unlock_and_return;
 		}
 	} else {
 		__ov2735_stop_stream(ov2735);
-//		pm_runtime_put(&client->dev);
+	//	pm_runtime_put(&client->dev);
 	}
 
 	ov2735->streaming = on;
@@ -666,7 +599,7 @@ static inline u32 ov2735_cal_delay(u32 cycles)
 
 static int __ov2735_power_on(struct ov2735 *ov2735)
 {
-	//int ret;
+//	int ret;
 	u32 delay_us;
 /*	struct device *dev = &ov2735->client->dev;
 
@@ -698,6 +631,7 @@ static int __ov2735_power_on(struct ov2735 *ov2735)
 	}
 */
 	/* 8192 cycles prior to first SCCB transaction */
+
 	delay_us = ov2735_cal_delay(8192);
 	usleep_range(delay_us, delay_us * 2);
 
@@ -711,7 +645,7 @@ static int __ov2735_power_on(struct ov2735 *ov2735)
 
 static void __ov2735_power_off(struct ov2735 *ov2735)
 {
-	/*if (!IS_ERR(ov2735->pwdn_gpio))
+/*	if (!IS_ERR(ov2735->pwdn_gpio))
 		gpiod_set_value_cansleep(ov2735->pwdn_gpio, 0);
 	clk_disable_unprepare(ov2735->xvclk);
 	if (!IS_ERR(ov2735->reset_gpio))
@@ -772,13 +706,6 @@ static const struct v4l2_subdev_internal_ops ov2735_internal_ops = {
 };
 #endif
 
-static const struct v4l2_subdev_core_ops ov2735_core_ops = {
-	.ioctl = ov2735_ioctl,
-#ifdef CONFIG_COMPAT
-	.compat_ioctl32 = ov2735_compat_ioctl32,
-#endif
-};
-
 static const struct v4l2_subdev_video_ops ov2735_video_ops = {
 	.s_stream = ov2735_s_stream,
 };
@@ -791,7 +718,6 @@ static const struct v4l2_subdev_pad_ops ov2735_pad_ops = {
 };
 
 static const struct v4l2_subdev_ops ov2735_subdev_ops = {
-	.core	= &ov2735_core_ops,
 	.video	= &ov2735_video_ops,
 	.pad	= &ov2735_pad_ops,
 };
@@ -821,6 +747,9 @@ static int ov2735_set_ctrl(struct v4l2_ctrl *ctrl)
 	ret = ov2735_write_reg(client, PAGE_SELECT_REG, PAGE_ONE);
 	switch (ctrl->id) {
 	case V4L2_CID_EXPOSURE:
+		printk("ov2735 exposure %d\n",ctrl->val );
+	//	ctrl->val = 1200;
+		printk("ov2735 exposure %d\n",ctrl->val );
 		ret |= ov2735_write_reg(client,
 			 OV2735_AEC_PK_LONG_EXPO_2ND_REG,
 			 OV2735_FETCH_2ND_BYTE_EXP(ctrl->val));
@@ -979,38 +908,18 @@ static int ov2735_configure_regulators(struct ov2735 *ov2735)
 static int ov2735_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
-
 	struct device *dev = &client->dev;
-	struct device_node *node = dev->of_node;
 	struct ov2735 *ov2735;
 	struct v4l2_subdev *sd;
-	char facing[2];
 	int ret;
-	printk("hello from ov2735 probe");
-	dev_info(dev, "driver version: %02x.%02x.%02x",
-		DRIVER_VERSION >> 16,
-		(DRIVER_VERSION & 0xff00) >> 8,
-		DRIVER_VERSION & 0x00ff);
 
 	ov2735 = devm_kzalloc(dev, sizeof(*ov2735), GFP_KERNEL);
 	if (!ov2735)
 		return -ENOMEM;
 
-	ret = of_property_read_u32(node, RKMODULE_CAMERA_MODULE_INDEX,
-				   &ov2735->module_index);
-	ret |= of_property_read_string(node, RKMODULE_CAMERA_MODULE_FACING,
-				       &ov2735->module_facing);
-	ret |= of_property_read_string(node, RKMODULE_CAMERA_MODULE_NAME,
-				       &ov2735->module_name);
-	ret |= of_property_read_string(node, RKMODULE_CAMERA_LENS_NAME,
-				       &ov2735->len_name);
-	if (ret) {
-		dev_err(dev, "could not get module information!\n");
-		return -EINVAL;
-	}
-
 	ov2735->client = client;
 	ov2735->cur_mode = &supported_modes[0];
+
 	/*
 	ov2735->xvclk = devm_clk_get(dev, "xvclk");
 	if (IS_ERR(ov2735->xvclk)) {
@@ -1067,16 +976,7 @@ static int ov2735_probe(struct i2c_client *client,
 		goto err_power_off;
 #endif
 
-	memset(facing, 0, sizeof(facing));
-	if (strcmp(ov2735->module_facing, "back") == 0)
-		facing[0] = 'b';
-	else
-		facing[0] = 'f';
-
-	snprintf(sd->name, sizeof(sd->name), "m%02d_%s_%s %s",
-		 ov2735->module_index, facing,
-		 OV2735_NAME, dev_name(sd->dev));
-	ret = v4l2_async_register_subdev_sensor_common(sd);
+	ret = v4l2_async_register_subdev(sd);
 	if (ret) {
 		dev_err(dev, "v4l2 async register subdev failed\n");
 		goto err_clean_entity;
@@ -1086,7 +986,6 @@ static int ov2735_probe(struct i2c_client *client,
 	pm_runtime_enable(dev);
 	pm_runtime_idle(dev);
 */
-	printk("ov2735 successfully probe");
 	return 0;
 
 err_clean_entity:
@@ -1123,6 +1022,7 @@ static int ov2735_remove(struct i2c_client *client)
 	return 0;
 }
 
+
 #if IS_ENABLED(CONFIG_OF)
 static const struct of_device_id ov2735_of_match[] = {
 	{ .compatible = "ovti,ov2735" },
@@ -1138,7 +1038,7 @@ static const struct i2c_device_id ov2735_match_id[] = {
 
 static struct i2c_driver ov2735_i2c_driver = {
 	.driver = {
-		.name = OV2735_NAME,
+		.name = "ov2735",
 //		.pm = &ov2735_pm_ops,
 		.of_match_table = of_match_ptr(ov2735_of_match),
 	},
