@@ -265,18 +265,18 @@ static struct regval ov2735_1920_1080_30fps[] = {
 #define MAX_FPS 30
 static const struct ov2735_mode supported_modes[] = {
 	{
-		.width = 3840,
+		.width = 1920 ,
 		.height = 1080,
 		.max_fps = MAX_FPS,
-		.exp_def = 0x31f,
-		.hts_def = HTS_DEF*2,
+		.exp_def = 0x4BA,
+		.hts_def = HTS_DEF,
 		.vts_def = VTS_DEF,
 		.reg_list = ov2735_1920_1080_30fps,
 	},
 };
 
-#define OV2735_LINK_FREQ_420MHZ		420000000 * 2
-#define OV2735_PIXEL_RATE		(MAX_FPS * HTS_DEF * VTS_DEF *2)
+#define OV2735_LINK_FREQ_420MHZ		420000000 //* 2
+#define OV2735_PIXEL_RATE		(MAX_FPS * HTS_DEF * VTS_DEF)// *2)
 static const s64 link_freq_menu_items[] = {
 	OV2735_LINK_FREQ_420MHZ
 };
