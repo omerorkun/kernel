@@ -451,7 +451,7 @@
 
 	camera0: ar0330@10 {
 		compatible = "ar0330";
-		reg = <0x18>;
+		reg = <0x10>;
 /*		clocks = <&ext_cam_clk>; */
 		status = "okay";
 		port {

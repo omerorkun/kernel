@@ -202,94 +202,157 @@ struct ar0330 {
 //{
 //	return container_of(sd, struct ar0330, subdev);
 //}
-///* -----------------------------------------------------------------------------
-// * Register access
-// */
-//static int __ar0330_read(struct i2c_client *client, u16 reg, size_t size)
+/* -----------------------------------------------------------------------------
+ * Register access
+ */
+static int __ar0330_read(struct i2c_client *client, u16 reg, size_t size)
+{
+	u8 data[2];
+	struct i2c_msg msg[2] = {
+		{ client->addr, 0, 2, data },
+		{ client->addr, I2C_M_RD, size, data },
+	};
+	int ret;
+	data[0] = reg >> 8;
+	data[1] = reg & 0xff;
+	ret = i2c_transfer(client->adapter, msg, 2);
+	if (ret < 0) {
+		dev_err(&client->dev, "%s(0x%04x) failed (%d)\n", __func__,
+			reg, ret);
+		return ret;
+	}
+	if (size == 2)
+		return (data[0] << 8) | data[1];
+	else
+		return data[0];
+}
+static int __ar0330_write(struct i2c_client *client, u16 reg, u16 value,
+			  size_t size)
+{
+	u8 data[4];
+	struct i2c_msg msg = { client->addr, 0, 2 + size, data };
+	int ret;
+	v4l2_info(client, "writing 0x%04x to 0x%04x\n", value, reg);
+	data[0] = reg >> 8;
+	data[1] = reg & 0xff;
+	if (size == 2) {
+		data[2] = value >> 8;
+		data[3] = value & 0xff;
+	} else {
+		data[2] = value & 0xff;
+	}
+	ret = i2c_transfer(client->adapter, &msg, 1);
+	if (ret < 0) {
+		dev_err(&client->dev, "%s(0x%04x) failed (%d)\n", __func__,
+			reg, ret);
+		return ret;
+	}
+	return 0;
+}
+static inline int ar0330_read8(struct i2c_client *client, u16 reg)
+{
+	return __ar0330_read(client, reg, 1);
+}
+static inline int ar0330_write8(struct i2c_client *client, u16 reg, u8 value)
+{
+	return __ar0330_write(client, reg, value, 1);
+}
+static inline int ar0330_read16(struct i2c_client *client, u16 reg)
+{
+	return __ar0330_read(client, reg, 2);
+}
+static inline int ar0330_write16(struct i2c_client *client, u16 reg, u16 value)
+{
+	return __ar0330_write(client, reg, value, 2);
+}
+static inline int ar0330_set16(struct i2c_client *client, u16 reg, u16 value,
+			       u16 mask)
+{
+	int rval = ar0330_read16(client, reg);
+	if (rval < 0)
+		return rval;
+	else
+		return ar0330_write16(client, reg,
+				     (rval & ~mask) | (value & mask));
+}
+
+//static int ar0330_s_stream(struct v4l2_subdev *subdev, int enable)
 //{
-//	u8 data[2];
-//	struct i2c_msg msg[2] = {
-//		{ client->addr, 0, 2, data },
-//		{ client->addr, I2C_M_RD, size, data },
-//	};
+//	struct i2c_client *client = v4l2_get_subdevdata(subdev);
+//	struct ar0330 *ar0330 = to_ar0330(subdev);
 //	int ret;
-//	data[0] = reg >> 8;
-//	data[1] = reg & 0xff;
-//	ret = i2c_transfer(client->adapter, msg, 2);
-//	if (ret < 0) {
-//		dev_err(&client->dev, "%s(0x%04x) failed (%d)\n", __func__,
-//			reg, ret);
+//	v4l2_info(&ar0330->subdev, "%s: frame count is %d\n", __func__,
+//		ar0330_read16(client, AR0330_FRAME_COUNT));
+//	if (!enable) {
+//		ar0330->streaming = 0;
+//		ar0330_write8(client, AR0330_MODE_SELECT, 0);
+//		return ar0330_set_power(subdev, 0);
+//	}
+//	ar0330_calc_vt(subdev);
+//	ret = ar0330_set_power(subdev, 1);
+//	if (ret) {
+//		v4l2_err(&ar0330->subdev, "Power on failed\n");
 //		return ret;
 //	}
-//	if (size == 2)
-//		return (data[0] << 8) | data[1];
-//	else
-//		return data[0];
-//}
-//static int __ar0330_write(struct i2c_client *client, u16 reg, u16 value,
-//			  size_t size)
-//{
-//	u8 data[4];
-//	struct i2c_msg msg = { client->addr, 0, 2 + size, data };
-//	int ret;
-//	v4l2_info(client, "writing 0x%04x to 0x%04x\n", value, reg);
-//	data[0] = reg >> 8;
-//	data[1] = reg & 0xff;
-//	if (size == 2) {
-//		data[2] = value >> 8;
-//		data[3] = value & 0xff;
-//	} else {
-//		data[2] = value & 0xff;
-//	}
-//	ret = i2c_transfer(client->adapter, &msg, 1);
-//	if (ret < 0) {
-//		dev_err(&client->dev, "%s(0x%04x) failed (%d)\n", __func__,
-//			reg, ret);
-//		return ret;
+//	ret = ar0330_pll_configure(ar0330);
+//	if (ret < 0)
+//		goto power_off;
+//	ret = ar0330_set_params(ar0330);
+//	if (ret < 0)
+//		goto power_off;
+//	/* Stream on */
+//	ar0330->streaming = 1;
+//	ar0330_write8(client, AR0330_MODE_SELECT,
+//			     AR0330_MODE_SELECT_STREAM);
+//	ret = v4l2_ctrl_handler_setup(&ar0330->ctrls);
+//	if (ret) {
+//		v4l2_err(&ar0330->subdev, "v4l2_ctrl_handler_setup failure\n");
+//		goto power_off;
 //	}
 //	return 0;
+//power_off:
+//	ar0330_set_power(subdev, 0);
+//	return ret;
 //}
-//static inline int ar0330_read8(struct i2c_client *client, u16 reg)
+//
+//static int ar0330_enum_mbus_code(struct v4l2_subdev *subdev,
+//				  struct v4l2_subdev_fh *fh,
+//				  struct v4l2_subdev_mbus_code_enum *code)
 //{
-//	return __ar0330_read(client, reg, 1);
+//	struct ar0330 *ar0330 = to_ar0330(subdev);
+//	if (code->pad || code->index)
+//		return -EINVAL;
+//	code->code = ar0330->format.code;
+//	return 0;
 //}
-//static inline int ar0330_write8(struct i2c_client *client, u16 reg, u8 value)
+//static int ar0330_enum_frame_size(struct v4l2_subdev *subdev,
+//				   struct v4l2_subdev_fh *fh,
+//				   struct v4l2_subdev_frame_size_enum *fse)
 //{
-//	return __ar0330_write(client, reg, value, 1);
+//	struct ar0330 *ar0330 = to_ar0330(subdev);
+//	if (fse->index >= 3 || fse->code != ar0330->format.code)
+//		return -EINVAL;
+//	fse->min_width = AR0330_WINDOW_WIDTH_DEF / (fse->index + 1);
+//	fse->max_width = fse->min_width;
+//	fse->min_height = AR0330_WINDOW_HEIGHT_DEF / (fse->index + 1);
+//	fse->max_height = fse->min_height;
+//	return 0;
 //}
-//static inline int ar0330_read16(struct i2c_client *client, u16 reg)
-//{
-//	return __ar0330_read(client, reg, 2);
-//}
-//static inline int ar0330_write16(struct i2c_client *client, u16 reg, u16 value)
-//{
-//	return __ar0330_write(client, reg, value, 2);
-//}
-//static inline int ar0330_set16(struct i2c_client *client, u16 reg, u16 value,
-//			       u16 mask)
-//{
-//	int rval = ar0330_read16(client, reg);
-//	if (rval < 0)
-//		return rval;
-//	else
-//		return ar0330_write16(client, reg,
-//				     (rval & ~mask) | (value & mask));
-//}
-static struct v4l2_subdev_video_ops ar0330_subdev_video_ops = {
-	.s_stream       = ar0330_s_stream,
-/*	.g_frame_interval = ar0330_g_frame_interval,
-	.s_frame_interval = ar0330_s_frame_interval,*/
-};
-static struct v4l2_subdev_pad_ops ar0330_subdev_pad_ops = {
-	.enum_mbus_code = ar0330_enum_mbus_code,
-	.enum_frame_size = ar0330_enum_frame_size,
-	.get_fmt = ar0330_get_format,
-	.set_fmt = ar0330_set_format,
-};
-static struct v4l2_subdev_ops ar0330_subdev_ops = {
-	.video  = &ar0330_subdev_video_ops,
-	.pad    = &ar0330_subdev_pad_ops,
-};
+//static struct v4l2_subdev_video_ops ar0330_subdev_video_ops = {
+//	.s_stream       = ar0330_s_stream,
+///*	.g_frame_interval = ar0330_g_frame_interval,
+//	.s_frame_interval = ar0330_s_frame_interval,*/
+//};
+//static struct v4l2_subdev_pad_ops ar0330_subdev_pad_ops = {
+//	.enum_mbus_code = ar0330_enum_mbus_code,
+//	.enum_frame_size = ar0330_enum_frame_size,
+//	.get_fmt = ar0330_get_format,
+//	.set_fmt = ar0330_set_format,
+//};
+//static struct v4l2_subdev_ops ar0330_subdev_ops = {
+//	.video  = &ar0330_subdev_video_ops,
+//	.pad    = &ar0330_subdev_pad_ops,
+//};
 
 /* -----------------------------------------------------------------------------
  * Driver initialization and probing
@@ -302,6 +365,7 @@ static int ar0330_probe(struct i2c_client *client,
 //	struct ar0330_platform_data *pdata = client->dev.platform_data;
 	struct ar0330 *ar0330;
 	struct v4l2_subdev *sd;
+	s32 data;
 //	unsigned int i;
 	int ret;
 	printk("Wellcome to ar0330 driver test\n");
@@ -321,7 +385,15 @@ static int ar0330_probe(struct i2c_client *client,
 	mutex_init(&ar0330->power_lock);
 
 	sd = &ar0330->subdev;
-	v4l2_i2c_subdev_init(sd, client, &ar0330_subdev_ops);
+//	v4l2_i2c_subdev_init(sd, client, &ar0330_subdev_ops);
+
+	data = ar0330_read16(client, AR0330_CHIP_VERSION);
+		if (data != AR0330_CHIP_VERSION_VALUE) {
+			dev_err(&client->dev, "AR0330 not detected, wrong version "
+				"0x%04x\n", data);
+			return -ENODEV;
+		}
+	printk("ar0330 value of a = 0x%08x", data);
 //	ar0330->pdata = pdata;
 //	ar0330->read_mode = 0;
 //	v4l2_ctrl_handler_init(&ar0330->ctrls,
