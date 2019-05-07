@@ -536,6 +536,17 @@ config VIDEO_OV2735
 	 To compile this driver as a module, choose M here: the
 	 module will be called ov2735.
 
+config VIDEO_AR0330
+	tristate "OnSemi AR0330 sensor support"
+	depends on VIDEO_V4L2 && I2C
+	depends on MEDIA_CAMERA_SUPPORT
+	help
+	 This is a Video4Linux2 sensor-level driver for the OmniVision
+	 AR0330 camera.
+
+	 To compile this driver as a module, choose M here: the
+	 module will be called ar0330.
+
 config VIDEO_OV4689
 	tristate "OmniVision OV4689 sensor support"
 	depends on VIDEO_V4L2 && I2C && MEDIA_CONTROLLER
