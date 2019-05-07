@@ -275,21 +275,21 @@ struct ar0330 {
 //		return ar0330_write16(client, reg,
 //				     (rval & ~mask) | (value & mask));
 //}
-//static struct v4l2_subdev_video_ops ar0330_subdev_video_ops = {
-//	.s_stream       = ar0330_s_stream,
-///*	.g_frame_interval = ar0330_g_frame_interval,
-//	.s_frame_interval = ar0330_s_frame_interval,*/
-//};
-//static struct v4l2_subdev_pad_ops ar0330_subdev_pad_ops = {
-//	.enum_mbus_code = ar0330_enum_mbus_code,
-//	.enum_frame_size = ar0330_enum_frame_size,
-//	.get_fmt = ar0330_get_format,
-//	.set_fmt = ar0330_set_format,
-//};
-//static struct v4l2_subdev_ops ar0330_subdev_ops = {
-//	.video  = &ar0330_subdev_video_ops,
-//	.pad    = &ar0330_subdev_pad_ops,
-//};
+static struct v4l2_subdev_video_ops ar0330_subdev_video_ops = {
+	.s_stream       = ar0330_s_stream,
+/*	.g_frame_interval = ar0330_g_frame_interval,
+	.s_frame_interval = ar0330_s_frame_interval,*/
+};
+static struct v4l2_subdev_pad_ops ar0330_subdev_pad_ops = {
+	.enum_mbus_code = ar0330_enum_mbus_code,
+	.enum_frame_size = ar0330_enum_frame_size,
+	.get_fmt = ar0330_get_format,
+	.set_fmt = ar0330_set_format,
+};
+static struct v4l2_subdev_ops ar0330_subdev_ops = {
+	.video  = &ar0330_subdev_video_ops,
+	.pad    = &ar0330_subdev_pad_ops,
+};
 
 /* -----------------------------------------------------------------------------
  * Driver initialization and probing
@@ -305,6 +305,10 @@ static int ar0330_probe(struct i2c_client *client,
 //	unsigned int i;
 	int ret;
 	printk("Wellcome to ar0330 driver test\n");
+	if(dev == NULL)
+	{
+		printk("ar0330 dev is null\n");
+	}
 	ar0330 = devm_kzalloc(dev, sizeof(*ar0330), GFP_KERNEL);
 	/*if (pdata == NULL) {
 		dev_err(&client->dev, "No platform data\n");
@@ -313,11 +317,11 @@ static int ar0330_probe(struct i2c_client *client,
 //	ar0330 = kzalloc(sizeof(*ar0330), GFP_KERNEL);
 	if (ar0330 == NULL)
 		return -ENOMEM;
-	printk("probe db-0\n");
+	printk("ar0330 probe db-0\n");
 	mutex_init(&ar0330->power_lock);
 
 	sd = &ar0330->subdev;
-//	v4l2_i2c_subdev_init(sd, client, &ar0330_subdev_ops);
+	v4l2_i2c_subdev_init(sd, client, &ar0330_subdev_ops);
 //	ar0330->pdata = pdata;
 //	ar0330->read_mode = 0;
 //	v4l2_ctrl_handler_init(&ar0330->ctrls,
