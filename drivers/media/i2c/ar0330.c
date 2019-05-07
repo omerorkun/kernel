@@ -468,11 +468,19 @@ static int ar0330_remove(struct i2c_client *client)
 	kfree(ar0330);*/
 	return 0;
 }
+#if IS_ENABLED(CONFIG_OF)
+static const struct of_device_id ov2735_of_match[] = {
+	{ .compatible = "ovti,ov2735" },
+	{},
+};
+MODULE_DEVICE_TABLE(of, ov2735_of_match);
+#endif
+
 static const struct i2c_device_id ar0330_id[] = {
 	{ "ar0330", 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(i2c, ar0330_id);
+//MODULE_DEVICE_TABLE(i2c, ar0330_id);
 static struct i2c_driver ar0330_i2c_driver = {
 	.driver = {
 		.name = "ar0330",
