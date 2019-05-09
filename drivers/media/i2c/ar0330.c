@@ -24,6 +24,8 @@
 #include <linux/videodev2.h>
 #include <linux/gcd.h>
 
+#include <linux/gpio/consumer.h>
+
 #include <media/v4l2-ctrls.h>
 #include <media/v4l2-device.h>
 #include <media/v4l2-subdev.h>
@@ -207,6 +209,53 @@ struct ar0330 {
  */
 static int __ar0330_read(struct i2c_client *client, u16 reg, size_t size)
 {
+/*	u8 val;
+	int ret;
+	unsigned char data_w[2] = { reg >> 8, reg & 0xff };
+//	struct i2c_client *client = v4l2_get_subdevdata(sd);
+	printk(KERN_ALERT"ar0330 client address : 0x%x, name : %s, register : 0x%x\n",client->addr,client->name, reg);
+	ret = i2c_master_send(client, data_w, 2);
+	if (ret < 0) {
+		dev_dbg(&client->dev, "%s: i2c write error, reg: %x\n",
+			__func__, reg);
+		return ret;
+	}
+
+	ret = i2c_master_recv(client, &val, 1);
+	if (ret < 0)
+	{	dev_dbg(&client->dev, "%s: i2c read error, reg: %x\n",
+			__func__, reg);
+	return ret;
+	}
+	printk(KERN_ALERT"ar0330 result : 0x%x\n",val);
+	return val;*/
+/*	struct i2c_msg msg[2];
+	u8 buf[1];
+	int ret;
+	printk(KERN_ALERT"ar0330 client address : 0x%x, name : %s, register : 0x%x\n",client->addr,client->name, reg);
+	buf[0] = reg & 0xFF;
+
+	msg[0].addr = client->addr;
+	msg[0].flags = client->flags;
+	msg[0].buf = buf;
+	msg[0].len = sizeof(buf);
+
+	msg[1].addr = client->addr;
+	msg[1].flags = client->flags | I2C_M_RD;
+	msg[1].buf = buf;
+	msg[1].len = 1;
+
+	ret = i2c_transfer(client->adapter, msg, 2);
+	if (ret >= 0) {
+		return buf[0];
+	//	return 0;
+	}
+
+	dev_err(&client->dev,
+		"ov2735 read reg:0x%x failed !\n", reg);
+
+	return ret;*/
+
 	u8 data[2];
 	struct i2c_msg msg[2] = {
 		{ client->addr, 0, 2, data },
@@ -224,7 +273,7 @@ static int __ar0330_read(struct i2c_client *client, u16 reg, size_t size)
 	if (size == 2)
 		return (data[0] << 8) | data[1];
 	else
-		return data[0];
+		return data[0];/**/
 }
 static int __ar0330_write(struct i2c_client *client, u16 reg, u16 value,
 			  size_t size)
@@ -357,6 +406,74 @@ static inline int ar0330_set16(struct i2c_client *client, u16 reg, u16 value,
 /* -----------------------------------------------------------------------------
  * Driver initialization and probing
  */
+
+//static int ar0330_registered(struct i2c_client *client )
+//{
+////	struct i2c_client *client = v4l2_get_subdevdata(subdev);
+////	struct ar0330 *ar0330 = to_ar0330(subdev);
+//	s32 reserved_chiprev;
+//	s32 data;
+//	u32 revision[2];
+//	int ret;
+////	ret = ar0330_power_on(ar0330);
+//	if (ret < 0) {
+//		dev_err(&client->dev, "AR0330 power up failed\n");
+//		return ret;
+//	}
+//	/* Read out the chip version register */
+//	data = ar0330_read16(client, AR0330_CHIP_VERSION);
+//	if (data != AR0330_CHIP_VERSION_VALUE) {
+//		dev_err(&client->dev, "AR0330 not detected, wrong version "
+//			"0x%04x\n", data);
+//		return -ENODEV;
+//	}
+//	reserved_chiprev = ar0330_read8(client, AR0330_RESERVED_CHIPREV);
+//	if (reserved_chiprev < 0) {
+//		dev_err(&client->dev, "%s: unable to read chip revision (%d)\n",
+//			__func__, reserved_chiprev);
+//		return -ENODEV;
+//	}
+//	data = ar0330_read16(client, AR0330_TEST_DATA_RED);
+//	if (data < 0) {
+//		dev_err(&client->dev, "%s: unable to read chip version (%d)\n",
+//			__func__, data);
+//		return -ENODEV;
+//	}
+//	if (reserved_chiprev == 0x1200) {
+//		revision[0] = 1;
+//		revision[1] = 0;
+//	//	ar0330->version = 1;
+//	}
+//	else if (data == 0x0000) {
+//		revision[0] = 2;
+//		revision[1] = 0;
+//	//	ar0330->version = 2;
+//	}
+//	else if (data == 0x0006) {
+//		revision[0] = 2;
+//		revision[1] = 1;
+////		ar0330->version = 3;
+//	}
+//	else if (data == 0x0007) {
+//		revision[0] = 2;
+//		revision[1] = 1;
+//	//	ar0330->version = 4;
+//	}
+//	else if (data == 0x0008) {
+//		revision[0] = 2;
+//		revision[1] = 1;
+//	//	ar0330->version = 5;
+//	}
+//	else {
+//		revision[0] = 0;
+//		revision[1] = 0;
+//	//	ar0330->version = 0;
+//	}
+//	//ar0330_power_off(ar0330);
+//	dev_info(&client->dev, "AR0330 rev. %02x ver. %u detected at address "
+//		 "0x%02x\n", revision[0], revision[1], client->addr);
+//	return ret;
+//}
 static int ar0330_probe(struct i2c_client *client,
 			 const struct i2c_device_id *did)
 {
@@ -366,6 +483,8 @@ static int ar0330_probe(struct i2c_client *client,
 	struct ar0330 *ar0330;
 	struct v4l2_subdev *sd;
 	s32 data;
+	struct gpio_desc	*reset_gpio;
+
 //	unsigned int i;
 	int ret;
 	printk("Wellcome to ar0330 driver test\n");
@@ -379,15 +498,46 @@ static int ar0330_probe(struct i2c_client *client,
 		return -EINVAL;
 	}*/
 //	ar0330 = kzalloc(sizeof(*ar0330), GFP_KERNEL);
+	reset_gpio = devm_gpiod_get(dev, "camreset", GPIOD_OUT_LOW);
+/*	if(IS_ERR(reset_gpio))
+	{
+		printk("ar0330 unsuccessfull led operation\n");
+	}
+	else*/
+		gpiod_set_value_cansleep(reset_gpio, 0);
+		printk("ar0330 db-0\n");
+		usleep_range(1000, 2000);
+		//msleep(500);
+		printk("ar0330 db-1\n");
+		gpiod_set_value_cansleep(reset_gpio, 1);
+		printk("ar0330 db-2\n");
+		usleep_range(10000, 11000);
+		printk("ar0330 db-3\n");
+		msleep(50);
 	if (ar0330 == NULL)
 		return -ENOMEM;
-	printk("ar0330 probe db-0\n");
+	printk("ar0330 probe db-4\n");
 	mutex_init(&ar0330->power_lock);
 
 	sd = &ar0330->subdev;
 //	v4l2_i2c_subdev_init(sd, client, &ar0330_subdev_ops);
 
+/*	ret = ar0330_write16(client,0x3052, 0xA114);
+	if (ret < 0)
+	{
+		printk("ar0330 write failed\n");
+	//	return ret;
+	}*/
+	ret = ar0330_set16(client, AR0330_RESET, AR0330_RESET_RESET,
+						   AR0330_RESET_RESET);
+	if (ret < 0)
+	{
+		printk("ar0330 reset failed\n");
+	//	return ret;
+	}
+	msleep_interruptible(100);
 	data = ar0330_read16(client, AR0330_CHIP_VERSION);
+	printk(KERN_ALERT "ar0330 value of data = 0x%08x", data);
 		if (data != AR0330_CHIP_VERSION_VALUE) {
 			dev_err(&client->dev, "AR0330 not detected, wrong version "
 				"0x%04x\n", data);

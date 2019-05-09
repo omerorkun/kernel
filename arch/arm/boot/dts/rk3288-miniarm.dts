@@ -51,6 +51,7 @@
 		device_type = "memory";
 		reg = <0x0 0x0 0x0 0x80000000>;
 	};
+	
 
 	wireless-bluetooth {
 		compatible = "bluetooth-platdata";
@@ -177,10 +178,10 @@
 	vcc_cam: vcc-camera {
 		compatible = "regulator-fixed";
 		regulator-name = "vcc_cam";
-		pinctrl-names = "default";
+		pinctrl-names = "default", "camreset";
 		pinctrl-0 = <&cam_pwr>;
 		enable-active-high;
-		gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+	/*	gpio = <&gpio2 0 GPIO_ACTIVE_HIGH>;*/
 		regulator-always-on;
 		regulator-boot-on;
 	};
@@ -191,6 +192,7 @@
 		clock-output-names = "CLK_CAMERA_25MHZ";
 		#clock-cells = <0>;
 	};
+
 
 	xin32k: xin32k {
 		compatible = "fixed-clock";
@@ -453,6 +455,7 @@
 		compatible = "ar0330";
 		reg = <0x10>;
 /*		clocks = <&ext_cam_clk>; */
+		camreset-gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
 		status = "okay";
 		port {
 			ar0330_out: endpoint {
@@ -479,7 +482,7 @@
 		};
 	};
 
-	camera2: imx219@10 {
+	/*camera2: imx219@10 {
 		compatible = "sony,imx219";
 		reg = <0x10>;
 		clocks = <&ext_cam_clk>;
@@ -490,7 +493,7 @@
 				data-lanes = <1 2>;
 			};
 		};
-	};
+	};*/
 	/*camera1: imx219@10 {
 		compatible = "sony,imx219";
 		reg = <0x10>;
